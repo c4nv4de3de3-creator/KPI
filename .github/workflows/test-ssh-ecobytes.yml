@@ -1,0 +1,64 @@
+
+name: Test SSH EcoBytes
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  test-ssh:
+    name: Test SSH Deployment User
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+
+    steps:
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          audience: ${{ secrets.TS_AUDIENCE }}
+          tags: tag:ci-kpi
+
+      - name: Configure SSH key
+        env:
+          DEPLOY_KEY: ${{ secrets.PRODUCTION_SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" | tr -d '\r' > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+
+      - name: Verify VPS host identity
+        env:
+          SSH_HOST: ${{ vars.PRODUCTION_SSH_HOST }}
+        run: |
+          ssh-keyscan -T 10 -t ed25519 "$SSH_HOST" 2>/dev/null > ~/.ssh/known_hosts
+
+          ACTUAL=$(ssh-keygen -lf ~/.ssh/known_hosts | awk '{print $2}')
+          EXPECTED="SHA256:1dwzR79k/mM0Udjt6ygOeyhL5muKB3kUpfQ6k1dRk5Y"
+
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "SSH host fingerprint mismatch"
+            exit 1
+          fi
+
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Test SSH Login
+        env:
+          SSH_HOST: ${{ vars.PRODUCTION_SSH_HOST }}
+          SSH_USER: ${{ vars.PRODUCTION_SSH_USER }}
+          SSH_PORT: ${{ vars.PRODUCTION_SSH_PORT }}
+        run: |
+          ssh -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=10 \
+            -i ~/.ssh/id_deploy \
+            -p "$SSH_PORT" \
+            "$SSH_USER@$SSH_HOST" \
+            'whoami; hostname; id'
