@@ -1,0 +1,33 @@
+
+name: Test Tailscale EcoBytes
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  test-connection:
+    name: Test VPS Connectivity
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+
+    steps:
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          audience: ${{ secrets.TS_AUDIENCE }}
+          tags: tag:ci-kpi
+
+      - name: Verify Tailscale Connection
+        run: tailscale status
+
+      - name: Test VPS SSH Port
+        run: |
+          timeout 10 bash -c \
+            'echo > /dev/tcp/100.100.141.122/22'
+          echo "VPS SSH port is reachable"
