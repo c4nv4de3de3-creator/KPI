@@ -32,6 +32,22 @@ jobs:
           printf '%s\n' "$DEPLOY_KEY" | tr -d '\r' > ~/.ssh/id_deploy
           chmod 600 ~/.ssh/id_deploy
 
+      - name: Validate deployment private key
+        run: |
+          echo "Checking SSH private key..."
+          ssh-keygen -y -P "" -f ~/.ssh/id_deploy > /tmp/deploy-public-key
+          ssh-keygen -lf /tmp/deploy-public-key
+
+          EXPECTED="SHA256:7hK5n3TL4hnfdmCInXYOGX99kVlBjOmmGyMM37XyfAY"
+          ACTUAL=$(ssh-keygen -lf /tmp/deploy-public-key | awk '{print $2}')
+
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "ERROR: Deployment key fingerprint mismatch"
+            exit 1
+          fi
+
+          echo "Deployment SSH key verified successfully"
+
       - name: Verify VPS host identity
         env:
           SSH_HOST: ${{ vars.PRODUCTION_SSH_HOST }}
